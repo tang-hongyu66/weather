@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="上海天气">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤</text></svg>">
+<title>上海天气</title>
+<style>
+:root{--bg:#1a1a2e;--card:#16213e;--fg:#e0e0e0;--fg2:#a0a0b0;--accent:#4fc3f7;--green:#81c784;--red:#e57373;
+  --yell:#ffd54f;--radius:16px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro','PingFang SC','Microsoft YaHei',sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);min-height:100vh;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom) 16px;
+  -webkit-overflow-scrolling:touch}
+.header{text-align:center;padding:24px 0 14px}
+.header h1{font-size:22px;font-weight:700}
+.header .time{font-size:13px;color:var(--fg2);margin-top:4px}
+.card{background:var(--card);border-radius:var(--radius);padding:18px 16px;margin-bottom:12px}
+.hero{text-align:center;padding:8px 0}
+.hero .icon{font-size:64px}
+.hero .temp{font-size:56px;font-weight:300}
+.hero .desc{font-size:15px;color:var(--fg2);margin-top:4px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;margin-top:14px}
+.grid .item{display:flex;align-items:center;gap:6px;font-size:14px}
+.grid .val{color:var(--fg2);margin-left:auto}
+.section-title{font-size:15px;font-weight:600;color:var(--accent);margin-bottom:10px}
+.hourly-item{display:flex;align-items:center;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:13px;gap:8px}
+.hourly-item:last-child{border-bottom:none}
+.hourly-item .hl{min-width:70px;font-weight:600}
+.hourly-item .ht{min-width:32px;text-align:right;color:var(--accent);font-weight:600}
+.hourly-item .hi{font-size:20px}
+.hourly-item .hd{min-width:40px;color:var(--fg2);font-size:12px}
+.hourly-item .he{font-size:11px;color:#888;margin-left:auto}
+.day-item{padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.day-item:last-child{border-bottom:none}
+.day-item .dl{font-weight:600;margin-bottom:3px}
+.day-item .dd{font-size:13px;color:var(--fg2)}
+.btn-row{display:flex;gap:10px;margin:16px 0 8px}
+.btn{flex:1;padding:14px;border:none;border-radius:var(--radius);font-size:16px;font-weight:600;cursor:pointer;
+  transition:all .2s;-webkit-tap-highlight-color:transparent}
+.btn:active{transform:scale(.97);opacity:.8}
+.btn-refresh{background:var(--card);color:var(--fg)}
+.btn-push{background:var(--accent);color:#000}
+.btn-push.sending{background:#555;color:#999}
+.status{text-align:center;font-size:12px;color:var(--fg2);padding:8px}
+.alert{background:var(--red);color:#fff;border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;font-size:13px;font-weight:600;line-height:1.6}
+.loading{text-align:center;padding:40px;color:var(--fg2)}
+.spinner{display:inline-block;width:40px;height:40px;border:3px solid var(--card);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="header"><h1>🌤 上海天气</h1><div class="time" id="time"></div></div>
+<div id="alertBox"></div>
+<div id="content"><div class="loading"><div class="spinner"></div><p style="margin-top:12px">加载天气中...</p></div></div>
+<div class="btn-row">
+  <button class="btn btn-refresh" onclick="loadWeather()">🔄 刷新</button>
+  <button class="btn btn-push" id="btnPush" onclick="pushToFeishu()">📤 推送到飞书</button>
+</div>
+<div class="status" id="status">就绪</div>
+
+<script>
+// ========== 配置 ==========
+const CITY = 'Shanghai';
+const FEISHU_URL = 'https://open.feishu.cn/open-apis/bot/v2/hook/b86cf771-75ac-403b-b259-94812c20e595';
+
+// ========== 天气代码映射 ==========
+const EMOJI={113:'☀️',116:'🌤️',119:'⛅',122:'☁️',143:'🌫️',248:'🌫️',260:'🌫️',
+  176:'🌦️',263:'🌦️',266:'🌦️',293:'🌦️',296:'🌧️',299:'🌧️',302:'🌧️',305:'🌧️',
+  308:'🌧️',314:'🌧️',353:'🌧️',356:'🌧️',359:'⛈️',281:'🌨️',284:'🌨️',311:'🌨️',
+  179:'🌨️',182:'🌨️',317:'🌨️',320:'🌨️',323:'🌨️',326:'🌨️',335:'🌨️',338:'🌨️',
+  368:'🌨️',362:'🌨️',365:'🌨️',329:'❄️',332:'❄️',371:'❄️',227:'❄️',230:'❄️',
+  350:'🧊',374:'🧊',377:'🧊',386:'⛈️',389:'⛈️',392:'⛈️',395:'⛈️',200:'⛈️'};
+
+const CN={113:'晴',116:'局部多云',119:'多云',122:'阴天',143:'雾',176:'零星小雨',
+  179:'零星雨夹雪',182:'零星雨夹雪',200:'局部雷暴',227:'暴风雪',230:'暴风雪',
+  248:'雾',260:'冻雾',263:'零星小雨',266:'小雨',281:'冻雨',284:'强冻雨',
+  293:'零星小雨',296:'小雨',299:'间歇中雨',302:'中雨',305:'间歇大雨',308:'大雨',
+  311:'冻雨',314:'强冻雨',317:'雨夹雪',320:'强雨夹雪',323:'小雪',326:'中雪',
+  329:'大雪',332:'大雪',335:'零星小雪',338:'小雪',350:'冰粒',353:'阵雨',356:'强阵雨',
+  359:'特大暴雨',362:'阵雨夹雪',365:'强阵雨夹雪',368:'阵雪',371:'强阵雪',
+  374:'冰粒阵雨',377:'强冰粒阵雨',386:'雷阵雨',389:'强雷阵雨',392:'雷阵雪',395:'强雷阵雪'};
+
+const SEVERE={200:'局部雷暴',227:'暴风雪',230:'暴风雪',305:'间歇大雨',308:'大雨',
+  314:'强冻雨',329:'大雪',332:'大雪',356:'强阵雨',359:'特大暴雨',365:'强阵雨夹雪',
+  371:'强阵雪',377:'强冰粒阵雨',386:'雷阵雨',389:'强雷阵雨',392:'雷阵雪',395:'强雷阵雪'};
+
+function windArrow(d){return['⬆️','↗️','➡️','↘️','⬇️','↙️','⬅️','↖️'][Math.round(d/45)%8]}
+function windCN(d){return['北','东北','东','东南','南','西南','西','西北'][Math.round(d/45)%8]+'风'}
+
+let weatherCache=null;
+
+function setStatus(s){document.getElementById('status').textContent=s}
+
+async function loadWeather(){
+  document.getElementById('content').innerHTML='<div class="loading"><div class="spinner"></div><p style="margin-top:12px">更新中...</p></div>';
+  setStatus('获取天气中...');
+  try{
+    const r=await fetch('https://wttr.in/'+CITY+'?format=j1');
+    if(!r.ok) throw new Error('API 请求失败: '+r.status);
+    const d=await r.json();
+    weatherCache=d;
+    render(d);
+    document.getElementById('time').textContent='更新于 '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+    setStatus('✅ 已更新 · '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}));
+  }catch(e){
+    document.getElementById('content').innerHTML='<div class="loading"><p>❌ 加载失败</p><p style="color:#999;font-size:13px;margin-top:8px">'+e.message+'</p><button onclick="loadWeather()" style="margin-top:16px;padding:10px 24px;background:var(--accent);color:#000;border:none;border-radius:8px;font-size:14px">点击重试</button></div>';
+    setStatus('❌ '+e.message);
+  }
+}
+
+function getHourly(d){
+  const now=new Date();
+  const slots=[];
+  d.weather.forEach((day,dayIdx)=>{
+    day.hourly.forEach(slot=>{
+      const h=parseInt(slot.time)/100;
+      const dt=new Date(now);dt.setHours(0,0,0,0);dt.setDate(dt.getDate()+dayIdx);dt.setHours(h);
+      if(dt>now) slots.push({dt,slot,dayIdx});
+    });
+  });
+  slots.sort((a,b)=>a.dt-b.dt);
+  const results=[],used=new Set();
+  [2,4,6,8].forEach(offset=>{
+    const target=new Date(now.getTime()+offset*3600000);
+    let best=null,bestDiff=Infinity;
+    slots.forEach((s,i)=>{if(!used.has(i)){const diff=Math.abs(s.dt-target);if(diff<bestDiff){bestDiff=diff;best={...s,idx:i}}}});
+    if(!best) return;
+    used.add(best.idx);
+    const code=parseInt(best.slot.weatherCode||0);
+    results.push({
+      label:offset+'小时后', time:best.dt.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}),
+      prefix:best.dayIdx===1?'明天 ':(best.dayIdx===2?'后天 ':''),
+      emoji:EMOJI[code]||'🌈', desc:CN[code]||'未知',
+      temp:best.slot.tempC, humidity:best.slot.humidity,
+      wind_speed:best.slot.windspeedKmph, wind_deg:parseInt(best.slot.winddirDegree)||0
+    });
+  });
+  return results;
+}
+
+function render(d){
+  const cur=d.current_condition[0],code=parseInt(cur.weatherCode||0),wd=parseInt(cur.winddirDegree)||0;
+  const hourly=getHourly(d);
+  const alerts=[];
+  if(SEVERE[code]) alerts.push('⚠️ 当前: '+SEVERE[code]);
+  if(parseFloat(cur.temp_C)>=38) alerts.push('🔴 高温 '+cur.temp_C+'°C');
+  if(parseFloat(cur.temp_C)<=0) alerts.push('🔵 低温 '+cur.temp_C+'°C');
+  if(parseFloat(cur.windspeedKmph)>=50) alerts.push('💨 强风 '+cur.windspeedKmph+'km/h');
+  hourly.forEach(h=>{
+    if(SEVERE[h.code]) alerts.push('⏰ '+h.label+'('+h.prefix+h.time+'): '+SEVERE[h.code]);
+    if(parseFloat(h.temp)>=38) alerts.push('🔴 '+h.label+': 高温 '+h.temp+'°C');
+    if(parseFloat(h.wind_speed)>=50) alerts.push('💨 '+h.label+': 强风 '+h.wind_speed+'km/h');
+  });
+
+  // 告警
+  const uniq=[...new Set(alerts)];
+  document.getElementById('alertBox').innerHTML=uniq.length
+    ?'<div class="alert">🚨 异常天气告警!<br>'+uniq.join('<br>')+'</div>':'';
+  weatherCache._alerts=uniq;
+  weatherCache._hourly=hourly;
+
+  // 当前天气
+  let h='<div class="card"><div class="hero"><div class="icon">'+(EMOJI[code]||'🌈')+'</div>';
+  h+='<div class="temp">'+cur.temp_C+'°C</div>';
+  h+='<div class="desc">'+CN[code]+' · 体感 '+cur.FeelsLikeC+'°C</div></div>';
+  h+='<div class="grid">';
+  h+='<div class="item">💧 湿度<span class="val">'+cur.humidity+'%</span></div>';
+  h+='<div class="item">'+windArrow(wd)+' '+windCN(wd)+'<span class="val">'+cur.windspeedKmph+'km/h</span></div>';
+  h+='<div class="item">👁 能见度<span class="val">'+cur.visibility+'km</span></div>';
+  h+='<div class="item">☀ 紫外线<span class="val">'+cur.uvIndex+'</span></div>';
+  h+='<div class="item">🔵 气压<span class="val">'+cur.pressure+'hPa</span></div>';
+  h+='</div></div>';
+
+  // 逐小时
+  h+='<div class="card"><div class="section-title">⏰ 逐小时预报</div>';
+  hourly.forEach(hh=>{
+    const a=windArrow(hh.wind_deg);
+    h+='<div class="hourly-item"><span class="hl">'+hh.label+'</span><span class="hd">'+hh.prefix+hh.time+'</span><span class="hi">'+hh.emoji+'</span><span class="hd">'+hh.desc+'</span><span class="ht">'+hh.temp+'°C</span><span class="he">💧'+hh.humidity+'% '+a+hh.wind_speed+'km/h</span></div>';
+  });
+  h+='</div>';
+
+  // 每日
+  h+='<div class="card"><div class="section-title">📋 未来三天</div>';
+  ['今天','明天','后天'].forEach((lb,i)=>{
+    const day=d.weather[i];if(!day) return;
+    const hl=day.hourly,mid=hl?hl[Math.min(4,hl.length-1)]:{};
+    const dc=parseInt(mid.weatherCode||0),astro=day.astronomy?day.astronomy[0]:{};
+    h+='<div class="day-item"><div class="dl">'+lb+' ('+day.date+')  '+(EMOJI[dc]||'🌈')+' '+CN[dc]+'  🌡'+day.mintempC+'°C ~ '+day.maxtempC+'°C</div>';
+    h+='<div class="dd">💧'+(mid.humidity||'?')+'%  🌬'+(mid.windspeedKmph||'?')+'km/h  🌅'+(astro.sunrise||'?')+' → 🌇'+(astro.sunset||'?')+'</div></div>';
+  });
+  h+='</div>';
+  document.getElementById('content').innerHTML=h;
+}
+
+async function pushToFeishu(){
+  const btn=document.getElementById('btnPush');
+  if(btn.classList.contains('sending')||!weatherCache) return;
+  btn.classList.add('sending');btn.textContent='⏳ 推送中...';
+  setStatus('推送到飞书...');
+  try{
+    const d=weatherCache,hourly=weatherCache._hourly||getHourly(d);
+    const cur=d.current_condition[0],code=parseInt(cur.weatherCode||0);
+    const wd=parseInt(cur.winddirDegree)||0;
+    const now=new Date();
+    const today=now.getFullYear()+'年'+(now.getMonth()+1)+'月'+now.getDate()+'日';
+    const ampm=now.getHours()<12?'上午好 ☀️':(now.getHours()<18?'下午好 🌤':'晚上好 🌙');
+    // 先发告警
+    if(weatherCache._alerts&&weatherCache._alerts.length){
+      await fetch(FEISHU_URL,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({msg_type:'text',content:{text:'<at user_id="all">所有人</at>\n🚨 上海天气预警 · '+now.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+' 🚨\n\n'+weatherCache._alerts.join('\n')+'\n\n请做好防护准备!'}})});
+    }
+    // 卡片
+    const hc=code===113||code===116?'yellow':(SEVERE[code]?'red':(code>=323&&code<=371?'turquoise':(code===143||code===248||code===260?'grey':'blue')));
+    const fields=[
+      {is_short:true,text:{tag:'lark_md',content:'**🌡 温度**\n'+cur.temp_C+'°C'}},
+      {is_short:true,text:{tag:'lark_md',content:'**🤔 体感**\n'+cur.FeelsLikeC+'°C'}},
+      {is_short:true,text:{tag:'lark_md',content:'**'+(EMOJI[code]||'🌈')+' 天气**\n'+CN[code]}},
+      {is_short:true,text:{tag:'lark_md',content:'**💧 湿度**\n'+cur.humidity+'%'}},
+      {is_short:true,text:{tag:'lark_md',content:'**'+windArrow(wd)+' 风向**\n'+windCN(wd)+' '+cur.windspeedKmph+'km/h'}},
+      {is_short:true,text:{tag:'lark_md',content:'**👁 能见度**\n'+cur.visibility+'km'}},
+      {is_short:true,text:{tag:'lark_md',content:'**☀ 紫外线**\n'+cur.uvIndex}},
+      {is_short:true,text:{tag:'lark_md',content:'**🔵 气压**\n'+cur.pressure+'hPa'}},
+    ];
+    const hEls=hourly.map(h=>{
+      const a=windArrow(h.wind_deg);
+      return {tag:'div',text:{tag:'lark_md',content:'**'+h.label+'** ('+h.prefix+h.time+')  '+h.emoji+' '+h.desc+'  🌡'+h.temp+'°C  💧'+h.humidity+'%  '+a+h.wind_speed+'km/h'}};
+    });
+    const dEls=[];
+    ['今天','明天','后天'].forEach((lb,i)=>{
+      const day=d.weather[i];if(!day) return;
+      const hl=day.hourly,mid=hl?hl[Math.min(4,hl.length-1)]:{};
+      const dc=parseInt(mid.weatherCode||0),astro=day.astronomy?day.astronomy[0]:{};
+      dEls.push({tag:'column_set',flex_mode:'bisect',background_style:'default',columns:[{tag:'column',width:'weighted',weight:1,vertical_align:'top',elements:[{tag:'div',text:{tag:'lark_md',content:'**'+lb+'** ('+day.date+')\n'+(EMOJI[dc]||'🌈')+' '+CN[dc]+'  🌡'+day.mintempC+'°C ~ '+day.maxtempC+'°C\n💧'+(mid.humidity||'?')+'%  '+windArrow(parseInt(mid.winddirDegree)||0)+(mid.windspeedKmph||'?')+'km/h  🌅'+(astro.sunrise||'?')+' → 🌇'+(astro.sunset||'?')'}}]}]});
+      if(i<2) dEls.push({tag:'hr'});
+    });
+    const card={msg_type:'interactive',card:{header:{title:{tag:'plain_text',content:'🌤 上海天气预报 · '+today+' '+ampm},template:hc},elements:[
+      {tag:'div',text:{tag:'lark_md',content:'**📍 当前天气**'}},{tag:'div',fields:fields},{tag:'hr'},
+      {tag:'div',text:{tag:'lark_md',content:'**⏰ 逐小时预报**'}},...hEls,{tag:'hr'},
+      {tag:'div',text:{tag:'lark_md',content:'**📋 未来三天**'}},...dEls,{tag:'hr'},
+      {tag:'note',elements:[{tag:'plain_text',content:'来自 上海天气 · '+now.toLocaleString('zh-CN')}]}]}};
+    const resp=await fetch(FEISHU_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(card)});
+    const result=await resp.json();
+    if(result.StatusCode===0||result.code===0){setStatus('✅ 推送成功!');alert('天气已推送到飞书 📤')}
+    else{setStatus('⚠️ '+JSON.stringify(result));alert('推送失败: '+JSON.stringify(result))}
+  }catch(e){setStatus('❌ '+e.message);alert('推送失败: '+e.message)}
+  finally{btn.classList.remove('sending');btn.textContent='📤 推送到飞书'}
+}
+
+loadWeather();
+setInterval(loadWeather,300000);
+</script>
+</body>
+</html>
