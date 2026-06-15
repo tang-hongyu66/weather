@@ -95,20 +95,56 @@ let weatherCache=null;
 
 function setStatus(s){document.getElementById('status').textContent=s}
 
-async function loadWeather(){
-  document.getElementById('content').innerHTML='<div class="loading"><div class="spinner"></div><p style="margin-top:12px">更新中...</p></div>';
-  setStatus('获取天气中...');
+function saveCache(html,data){
+  try{localStorage.setItem('wx_html',html);localStorage.setItem('wx_data',JSON.stringify(data));localStorage.setItem('wx_time',Date.now())}catch(e){}
+}
+function loadCache(){
   try{
-    const r=await fetch('https://wttr.in/'+CITY+'?format=j1');
-    if(!r.ok) throw new Error('API 请求失败: '+r.status);
+    const html=localStorage.getItem('wx_html');
+    const data=JSON.parse(localStorage.getItem('wx_data')||'null');
+    const time=parseInt(localStorage.getItem('wx_time')||'0');
+    if(html&&data){return {html,data,time}}
+  }catch(e){}
+  return null;
+}
+
+async function loadWeather(force){
+  const cache=loadCache();
+  // 有缓存且非强制刷新, 先展示缓存内容
+  if(cache&&!force){
+    document.getElementById('content').innerHTML=cache.html;
+    const ago=Math.floor((Date.now()-cache.time)/60000);
+    document.getElementById('time').textContent='缓存('+ago+'分钟前) · 刷新中...';
+    setStatus('📦 显示缓存 · 后台更新...');
+  }else if(!cache){
+    document.getElementById('content').innerHTML='<div class="loading"><div class="spinner"></div><p style="margin-top:12px">加载中...</p></div>';
+    setStatus('获取天气中...');
+  }
+
+  try{
+    const ctrl=new AbortController();
+    const timeout=setTimeout(()=>ctrl.abort(),25000);
+    const r=await fetch('https://wttr.in/'+CITY+'?format=j1',{signal:ctrl.signal});
+    clearTimeout(timeout);
+    if(!r.ok) throw new Error('API 失败: '+r.status);
     const d=await r.json();
     weatherCache=d;
+    // 渲染并缓存
     render(d);
+    saveCache(document.getElementById('content').innerHTML,d);
     document.getElementById('time').textContent='更新于 '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
     setStatus('✅ 已更新 · '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}));
   }catch(e){
-    document.getElementById('content').innerHTML='<div class="loading"><p>❌ 加载失败</p><p style="color:#999;font-size:13px;margin-top:8px">'+e.message+'</p><button onclick="loadWeather()" style="margin-top:16px;padding:10px 24px;background:var(--accent);color:#000;border:none;border-radius:8px;font-size:14px">点击重试</button></div>';
-    setStatus('❌ '+e.message);
+    if(cache){
+      // 有缓存, 网络失败就用缓存
+      document.getElementById('content').innerHTML=cache.html;
+      const ago=Math.floor((Date.now()-cache.time)/60000);
+      document.getElementById('time').textContent='缓存('+ago+'分钟前) · 刷新失败';
+      setStatus('⚠️ 网络异常 · 显示缓存数据');
+    }else{
+      document.getElementById('content').innerHTML='<div class="loading"><p>❌ 网络异常</p><p style="color:#999;font-size:13px;margin-top:8px">'+e.message+'</p><button onclick="loadWeather(true)" style="margin-top:16px;padding:10px 24px;background:var(--accent);color:#000;border:none;border-radius:8px;font-size:14px">点击重试</button></div>';
+      setStatus('❌ '+e.message);
+    }
   }
 }
 
@@ -250,8 +286,21 @@ async function pushToFeishu(){
   finally{btn.classList.remove('sending');btn.textContent='📤 推送到飞书'}
 }
 
-loadWeather();
-setInterval(loadWeather,300000);
+// 首次加载: 优先显示缓存, 后台刷新
+(function(){
+  const cache=loadCache();
+  if(cache){
+    document.getElementById('content').innerHTML=cache.html;
+    const ago=Math.floor((Date.now()-cache.time)/60000);
+    document.getElementById('time').textContent='缓存('+ago+'分钟前)';
+    setStatus('📦 缓存 · 后台更新中...');
+    weatherCache=cache.data;
+    weatherCache._alerts=cache.data._alerts||[];
+    weatherCache._hourly=cache.data._hourly||[];
+  }
+  loadWeather(false);
+  setInterval(()=>loadWeather(false),300000);
+})();
 </script>
 </body>
 </html>
