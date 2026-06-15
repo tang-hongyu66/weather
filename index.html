@@ -84,9 +84,12 @@ const CN={113:'晴',116:'局部多云',119:'多云',122:'阴天',143:'雾',176:'
   359:'特大暴雨',362:'阵雨夹雪',365:'强阵雨夹雪',368:'阵雪',371:'强阵雪',
   374:'冰粒阵雨',377:'强冰粒阵雨',386:'雷阵雨',389:'强雷阵雨',392:'雷阵雪',395:'强雷阵雪'};
 
-const SEVERE={200:'局部雷暴',227:'暴风雪',230:'暴风雪',305:'间歇大雨',308:'大雨',
-  314:'强冻雨',329:'大雪',332:'大雪',356:'强阵雨',359:'特大暴雨',365:'强阵雨夹雪',
-  371:'强阵雪',377:'强冰粒阵雨',386:'雷阵雨',389:'强雷阵雨',392:'雷阵雪',395:'强雷阵雪'};
+const SEVERE={143:'雾',248:'大雾',260:'冻雾',200:'局部雷暴',302:'中雨',305:'间歇大雨',
+  308:'大雨',353:'阵雨',356:'强阵雨',359:'特大暴雨',311:'冻雨',314:'强冻雨',
+  317:'雨夹雪',320:'强雨夹雪',323:'小雪',326:'中雪',329:'大雪',332:'暴雪',
+  335:'零星小雪',338:'小雪',368:'阵雪',371:'强阵雪',227:'暴风雪',230:'暴风雪',
+  350:'冰粒',374:'冰粒阵雨',377:'强冰粒阵雨',
+  386:'雷阵雨',389:'强雷阵雨',392:'雷阵雪',395:'强雷阵雪'};
 
 function windArrow(d){return['⬆️','↗️','➡️','↘️','⬇️','↙️','⬅️','↖️'][Math.round(d/45)%8]}
 function windCN(d){return['北','东北','东','东南','南','西南','西','西北'][Math.round(d/45)%8]+'风'}
@@ -185,7 +188,7 @@ function render(d){
   if(SEVERE[code]) alerts.push('⚠️ 当前: '+SEVERE[code]);
   if(parseFloat(cur.temp_C)>=38) alerts.push('🔴 高温 '+cur.temp_C+'°C');
   if(parseFloat(cur.temp_C)<=0) alerts.push('🔵 低温 '+cur.temp_C+'°C');
-  if(parseFloat(cur.windspeedKmph)>=50) alerts.push('💨 强风 '+cur.windspeedKmph+'km/h');
+  if(parseFloat(cur.windspeedKmph)>=40) alerts.push('💨 强风 '+cur.windspeedKmph+'km/h');
   hourly.forEach(h=>{
     if(SEVERE[h.code]) alerts.push('⏰ '+h.label+'('+h.prefix+h.time+'): '+SEVERE[h.code]);
     if(parseFloat(h.temp)>=38) alerts.push('🔴 '+h.label+': 高温 '+h.temp+'°C');
