@@ -186,7 +186,7 @@ function render(d){
   const hourly=getHourly(d);
   const alerts=[];
   if(SEVERE[code]) alerts.push('⚠️ 当前: '+SEVERE[code]);
-  if(parseFloat(cur.temp_C)>=38) alerts.push('🔴 高温 '+cur.temp_C+'°C');
+  if(parseFloat(cur.temp_C)>=35) alerts.push('🔴 高温 '+cur.temp_C+'°C');
   if(parseFloat(cur.temp_C)<=0) alerts.push('🔵 低温 '+cur.temp_C+'°C');
   if(parseFloat(cur.windspeedKmph)>=40) alerts.push('💨 强风 '+cur.windspeedKmph+'km/h');
   hourly.forEach(h=>{
